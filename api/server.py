@@ -1,7 +1,7 @@
 from fire import Fire
 
-from mymodule.main import run_hello_world
-from mymodule.utils.logging import logger
+from visualisation.main import run_hello_world
+from visualisation.utils.logging import logger
 
 from dareplane_utils.default_server.server import DefaultServer
 
@@ -14,7 +14,7 @@ def main(port: int = 8080, ip: str = "127.0.0.1", loglevel: int = 10):
     }
 
     server = DefaultServer(
-        port, ip=ip, pcommand_map=pcommand_map, name="mymodule_control_server"
+        port, ip=ip, pcommand_map=pcommand_map, name="visualisation_control_server"
     )
 
     # initialize to start the socket
