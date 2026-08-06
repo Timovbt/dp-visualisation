@@ -1,16 +1,20 @@
 from fire import Fire
-
-from visualisation.main import run_hello_world
+from pathlib import Path
+from visualisation.visualisation import visualisation_factory
 from visualisation.utils.logging import logger
 
 from dareplane_utils.default_server.server import DefaultServer
 
 
-def main(port: int = 8080, ip: str = "127.0.0.1", loglevel: int = 10):
+def main(port: int = 8083, ip: str = "127.0.0.1", loglevel: int = 10,
+         conf_pth: Path = Path("./configs/config.toml"),):
     logger.setLevel(loglevel)
+    logger.debug(f"Initializing decoder with {conf_pth=}")
+
+    decoder = visualisation_factory(conf_pth)
 
     pcommand_map = {
-        "START": run_hello_world,  # here you would hook up the functionality of your module to the server
+        "CONNECT_DECODER": decoder.init_all,  # here you would hook up the functionality of your module to the server
     }
 
     server = DefaultServer(

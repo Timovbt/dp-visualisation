@@ -1,11 +1,11 @@
 import dash
-from dash.dependencies import Output, Input
-import dash_core_components as dcc
-import dash_html_components as html
 import plotly
 import random
 import plotly.graph_objs as go
 from collections import deque
+from dash.dependencies import Output, Input
+from dash import html
+from dash import dcc
 
 class Live_plot():
     """
@@ -22,9 +22,11 @@ class Live_plot():
     def __init__(self,
                  logger,
                  port,
-                 adress,
-                 window):
+                 address,
+                 window=None):
         self.logger = logger
+        self.port = port
+        self.address = address
         self.window = window
         pass
 
@@ -51,16 +53,13 @@ class Live_plot():
             ]
         )
 
-    def make_update(self, input):
+    def make_update(self,input):
         return input
     
-    def update(self,n):
-        self.X.append(self.X[-1]+1)
-        self.Y.append(self.Y[-1]+self.Y[-1] * random.uniform(-0.1,0.1))
-
+    def update(self,X):
         data = plotly.graph_objs.Scatter(
-                x=list(self.X),
-                y=list(self.Y),
+                x=list[X],
+                y=X,
                 name='Scatter',
                 mode= 'lines'
         )
@@ -69,6 +68,6 @@ class Live_plot():
                 'layout' : go.Layout(xaxis=dict(range=[min(self.X),max(self.X)]),yaxis = dict(range = [min(self.Y),max(self.Y)]),)}
 
     def run(self):
-        self.app.run(port = self.port,address = self.address)
+        self.app.run(host = self.address,port = self.port)
         self.logger.info(f'Started live plot on http://localhost:{self.port}/')
         
