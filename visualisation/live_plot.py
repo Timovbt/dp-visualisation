@@ -1,73 +1,60 @@
 import dash
 import plotly
 import random
+import numpy as np
 import plotly.graph_objs as go
 from collections import deque
+from mne import EvokedArray
 from dash.dependencies import Output, Input
 from dash import html
 from dash import dcc
+from waitress import serve
+from visualisation.utils.logging import logger
+from mne_lsl.stream import EpochsStream, StreamLSL
 
-class Live_plot():
-    """
-    Object to create a dash server to show a live figure from plotly that can be updated with new incoming data.
+app = dash.Dash(__name__)
+app.layout = html.Div(
+    [
+        dcc.Graph(id = 'live-graph', animate = True),
+        dcc.Interval(
+            id = 'graph-update',
+            interval = 1000,
+            n_intervals = 0
+        ),
+    ]
+)
 
-    Parameters
-    ----------
-
-    Attributes
-    ----------
+stream = StreamLSL(bufsize=4, name="output_average_stream",stype='data', source_id="output_average_stream")
+stream.connect(acquisition_delay=0.1, processing_flags="all")
 
 
-    """
-    def __init__(self,
-                 logger,
-                 port,
-                 address,
-                 window=None):
-        self.logger = logger
-        self.port = port
-        self.address = address
-        self.window = window
-        pass
+@app.callback(
+    Output('live-graph', 'figure'),
+    [ Input('graph-update', 'n_intervals') ]
+)
 
-        self.X = deque(maxlen = 20)
-        self.X.append(1)
+def update_graph(n):
+    print(n)
+    buf_data = stream.get_data()
+    print(buf_data[1])
+    print(buf_data[1].shape)
+    new_evoked = buf_data[1]
+    # new_evoked = EvokedArray(
+    #     [buf_data[1].mean(axis=0)], stream.info, nave=buf_data[1].shape[0]
+    #     )
+    data = plotly.graph_objs.Scatter(
+            x=list(new_evoked),
+            y=list(new_evoked),
+            name='Scatter',
+            mode= 'lines+markers'
+    )
 
-        self.Y = deque(maxlen = 20)
-        self.Y.append(1)
+    return {'data': [data],
+            'layout' : go.Layout(xaxis=dict(range=[min(new_evoked),max(new_evoked)]),yaxis = dict(range = [min(new_evoked),max(new_evoked)]),)}
 
-        self.app = dash.Dash(__name__)
+def run_plot(address,port):
+    serve(app,host=address,port=port)
 
-        #replaces @app.callback
-        self.app.callback(dash.dependencies.Output('live-graph', 'figure'), 
-            dash.dependencies.Input('graph-update', 'n_intervals'))(self.make_update)
-        
-        self.app.layout = html.Div(
-            [
-                dcc.Graph(id = 'live-graph', animate = True),
-                dcc.Interval(
-                    id = 'graph-update',
-                    interval = 1000,
-                    n_intervals = 0
-                ),
-            ]
-        )
-
-    def make_update(self,input):
-        return input
-    
-    def update(self,X):
-        data = plotly.graph_objs.Scatter(
-                x=list[X],
-                y=X,
-                name='Scatter',
-                mode= 'lines'
-        )
-
-        return {'data': [data],
-                'layout' : go.Layout(xaxis=dict(range=[min(self.X),max(self.X)]),yaxis = dict(range = [min(self.Y),max(self.Y)]),)}
-
-    def run(self):
-        self.app.run(host = self.address,port = self.port)
-        self.logger.info(f'Started live plot on http://localhost:{self.port}/')
-        
+if __name__ == "__main__":
+    print('s')
+    serve(app, host="0.0.0.0", port=8080)

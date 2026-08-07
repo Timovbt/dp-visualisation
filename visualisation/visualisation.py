@@ -7,9 +7,10 @@ from dareplane_utils.stream_watcher.lsl_stream_watcher import StreamWatcher
 from dareplane_utils.general.time import sleep_s
 from dareplane_utils.signal_processing.filtering import FilterBank
 from mne_lsl.stream import EpochsStream, StreamLSL
-from pylsl import StreamInlet
+from pylsl import StreamInlet,StreamInfo,StreamOutlet
 from visualisation.utils.logging import logger
-from visualisation.live_plot import Live_plot
+# from visualisation.live_plot import X,Y,run_plot
+# from visualisation.live_plot import Live_plot
 from numpy.typing import NDArray
 from scipy.signal import resample
 
@@ -64,9 +65,20 @@ class Visualisation():
         self.filterbank: FilterBank | None = None
         self.output_sw: StreamWatcher | None = None
         self.classifier_input_sfreq = None
-        self.figure = Live_plot(logger=self.logger,
-                                port=self.output_port,
-                                address=self.output_address)
+        # run_plot(address=self.output_address,port=self.output_port)
+        # # self.figure = Live_plot(logger=self.logger,
+        # #                         port=self.output_port,
+        # #                         address=self.output_address)
+
+        info = StreamInfo(
+                    name='output_average_stream',
+                    type="data",
+                    channel_count=5,
+                    nominal_srate=0,
+                    channel_format="float32",
+                    source_id="output_average_stream",
+                )
+        self.outlet = StreamOutlet(info)
 
     def init_all(self) -> int:
         """Return an int as this is exposed as a PCOMM `CONNECT_DECODER`"""
@@ -79,7 +91,7 @@ class Visualisation():
         print(7)
         self.create_filterbank()
         print(8)
-        self.figure.run()
+        # self.figure.run()
         self.run()
         print(9)
 
@@ -219,9 +231,15 @@ class Visualisation():
             self.input_mrk_sw.update()
             print(self.input_sw.buffer)
             x = self._create_epoch()
+            print(x[0].shape)
+            self.outlet.push_sample(x[0][0])
+            # self.outlet.push_sample(x)
             # print(x)
             # x = self.epochs.buffer.average() ##untested
-            self.figure.update(self.input_sw.buffer.mean())
+            # self.figure.update(self.input_sw.buffer.mean())
+            # if x[0].shape[0] > 0:
+            #     X = x
+            #     Y = x
 
         # if x.shape[2] > 0:
         #     xs = self._resample(x)
