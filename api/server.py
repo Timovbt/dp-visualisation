@@ -1,6 +1,7 @@
 from fire import Fire
 from pathlib import Path
 from visualisation.visualisation import visualisation_factory
+from visualisation.live_plot import run_plot
 from visualisation.utils.logging import logger
 
 from dareplane_utils.default_server.server import DefaultServer
@@ -14,7 +15,7 @@ def main(port: int = 8083, ip: str = "127.0.0.1", loglevel: int = 10,
     decoder = visualisation_factory(conf_pth)
 
     pcommand_map = {
-        "CONNECT_DECODER": decoder.init_all,  # here you would hook up the functionality of your module to the server
+        "CONNECT_DECODER": decoder.init_all,"CONNECT_VISUALISATION_SERVER": run_plot
     }
 
     server = DefaultServer(

@@ -21,6 +21,26 @@ class Visualisation():
 
     Parameters
     ----------
+    marker_stream_name: str
+        Name of the LSL stream where the stimulation logs to
+    data_stream_name: str
+        Name of incoming LSL stream with EEG-data
+    decoder_stream_name: str
+        Name of outgoing LSL stream to visualize processed data
+    buffer_size_s: float   
+    padding_size_s: float,
+    max_eval_time_s: int
+        Maximum time to spend on processing data in buffer
+    t_sleep_s: float = 0.1
+
+    selected_channels: list[str]
+        Selected EEG-channels for data visualisation
+    USED? output_port: int (default 8088)
+        Port for live_plot server
+    USED? output_address:str (default 127.0.0.1)
+        Address for live_plot server
+    band: list[int] (default [6,40])
+        Limits for bandpass filter applied to incoming EEG-data
 
     Attributes
     ----------
@@ -65,11 +85,6 @@ class Visualisation():
         self.filterbank: FilterBank | None = None
         self.output_sw: StreamWatcher | None = None
         self.classifier_input_sfreq = None
-        # run_plot(address=self.output_address,port=self.output_port)
-        # # self.figure = Live_plot(logger=self.logger,
-        # #                         port=self.output_port,
-        # #                         address=self.output_address)
-
         info = StreamInfo(
                     name='output_average_stream',
                     type="data",
@@ -81,35 +96,25 @@ class Visualisation():
         self.outlet = StreamOutlet(info)
 
     def init_all(self) -> int:
-        """Return an int as this is exposed as a PCOMM `CONNECT_DECODER`"""
+        """Returns an int as this is exposed as a PCOMM `CONNECT_DECODER`"""
 
         logger.info("initializing decoder")
-        print(5)
         self.connect_marker_stream()
-        print(6)
         self.connect_data_stream()
-        print(7)
         self.create_filterbank()
-        print(8)
-        # self.figure.run()
         self.run()
-        print(9)
 
         return 0
 
 
     def connect_marker_stream(self):
-        print('5b')
         logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
         self.input_mrk_sw = StreamWatcher(self.marker_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
-        print('5c')
         self.input_mrk_sw.connect_to_stream()
 
         if len(self.input_mrk_sw.channel_names) != 1:
             logger.error("The marker stream should have exactly one channel.")
-            print('5e')
             return 1
-        print('5d')
         return 0
 
     def connect_data_stream(self):
@@ -150,10 +155,6 @@ class Visualisation():
 
         return False
 
-    # def update_figure(self):
-    #     X = self.decoder_sw.buffer.average() ##untested
-    #     self.figure.update(X)
-
     def create_filterbank(self):
         logger.info("Creating the classifier and the filter bank.")
         assert self.input_chs_info, (
@@ -161,7 +162,6 @@ class Visualisation():
             "the input lsl stream to derive channel information by calling "
             " `self.connect_data_stream()`"
         )
-        print(self.band)
         self.filterbank = FilterBank(
             bands={"band": self.band},
             sfreq=self.input_sfreq,
@@ -225,6 +225,7 @@ class Visualisation():
         return x
 
     def run(self):
+        """Retrieve input buffer, process data, compute average and push to LSL decoder stream """
         logger.debug(f"Updating the decoder - {self.is_decoding=}")
         while True:
             self.input_sw.update()
@@ -266,11 +267,8 @@ def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
     return decoder
 
 def cli_run():
-    print("Cli run not supported for this module")
     decoder = visualisation_factory(Path("./configs/config.toml"))
-    print(1)
     decoder.init_all()
-    print(2)
     
 
 if __name__ == "__main__":
