@@ -1,12 +1,14 @@
 import numpy as np
 import time
 import toml
+import pylsl
 from fire import Fire
 from pathlib import Path
 from dareplane_utils.stream_watcher.lsl_stream_watcher import StreamWatcher
 from dareplane_utils.general.time import sleep_s
 from dareplane_utils.signal_processing.filtering import FilterBank
 from mne_lsl.stream import EpochsStream, StreamLSL
+from mne import EvokedArray,combine_evoked
 from pylsl import StreamInlet,StreamInfo,StreamOutlet
 from visualisation.utils.logging import logger
 # from visualisation.live_plot import X,Y,run_plot
@@ -53,6 +55,7 @@ class Visualisation():
             decoder_stream_name: str,
             buffer_size_s: float,
             padding_size_s: float,
+            start_eval_marker: str,
             max_eval_time_s: int,
             t_sleep_s: float = 0.1,
             selected_channels: list[str] | None = None,
@@ -65,6 +68,7 @@ class Visualisation():
         self.data_stream_name = data_stream_name
         self.buffer_size_s = buffer_size_s
         self.padding_size_s = padding_size_s
+        self.start_eval_marker = start_eval_marker
         self.t_sleep_s = t_sleep_s
         self.selected_channels = selected_channels
         self.max_eval_time_s = max_eval_time_s
@@ -80,17 +84,19 @@ class Visualisation():
 
         self.input_mrk_sw: StreamWatcher | None = None
         self.input_sw: StreamWatcher | None = None
+        self.epochstream = EpochsStream | None
         self.input_sfreq: int | None = None
         self.input_chs_info: list[dict[str, str]] | None = None
         self.filterbank: FilterBank | None = None
         self.output_sw: StreamWatcher | None = None
         self.classifier_input_sfreq = None
+
         info = StreamInfo(
                     name='output_average_stream',
                     type="data",
                     channel_count=5,
-                    nominal_srate=0,
-                    channel_format="float32",
+                    nominal_srate=pylsl.IRREGULAR_RATE,
+                    channel_format=pylsl.cf_float32,
                     source_id="output_average_stream",
                 )
         self.outlet = StreamOutlet(info)
@@ -101,17 +107,31 @@ class Visualisation():
         logger.info("initializing decoder")
         self.connect_marker_stream()
         self.connect_data_stream()
+        self.connect_epoch_stream()
         self.create_filterbank()
         self.run()
 
         return 0
 
+    def connect_epoch_stream(self):
+         if self.input_mrk_sw != None and self.input_sw != None:
+            self.epochstream = EpochsStream(
+                            stream = self.input_sw.inlet,
+                            bufsize = 30,
+                            event_id= 0,
+                            event_channels='Markers',
+                            event_stream = self.input_mrk_sw.inlet,
+                            picks = self.selected_channels
+                            ).connect(acquisition_delay=0.1)
+            return 0
+         else:
+             logger.info("data stream and marker stream must be connected first") #TODO
+             return 1
 
     def connect_marker_stream(self):
         logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
         self.input_mrk_sw = StreamWatcher(self.marker_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
         self.input_mrk_sw.connect_to_stream()
-
         if len(self.input_mrk_sw.channel_names) != 1:
             logger.error("The marker stream should have exactly one channel.")
             return 1
@@ -124,7 +144,7 @@ class Visualisation():
 
         self.input_sfreq = int(self.input_sw.inlet.info().nominal_srate())
         self.input_chs_info = [dict(ch_name=ch_name, type="EEG") for ch_name in self.input_sw.channel_names]
-
+        print(1)
         if self.selected_channels is None:
             self.selected_ch_idx = list(range(len(self.input_chs_info)))
         else:
@@ -140,6 +160,24 @@ class Visualisation():
             return 1
 
         return 0
+
+    def check_if_decoding_should_start(self):
+        if self.input_mrk_sw is None:
+            logger.error("No marker stream connected, cannot start decoding based on markers.")
+
+        if self.input_mrk_sw.n_new > 0:
+            markers = self.input_mrk_sw.unfold_buffer()[-self.input_mrk_sw.n_new:, 0]
+            markers_t = self.input_mrk_sw.unfold_buffer_t()[-self.input_mrk_sw.n_new:]
+
+            if self.start_eval_marker in markers:
+                logger.debug(f"Starting decoding based on marker '{self.start_eval_marker}'")
+                self.is_decoding = True
+                self.input_mrk_sw.n_new = 0
+                self.internal_decoding_start_time = time.time()
+
+                # get time stamp of start_eval_marker --> consider inputs for epoch from this onwards
+                idx = np.where(markers == self.start_eval_marker)[0]
+                self.start_eval_time = markers_t[idx]
 
     def has_decoding_event(self) -> bool:
         """
@@ -181,9 +219,9 @@ class Visualisation():
             self.input_sw.n_new = 0  # makes sure samples are filtered only once
 
     def _create_epoch(self) -> NDArray:
-        x = self.filterbank.get_data()[:, :, 0]
+        # x = self.filterbank.get_data()[:, :, 0]
+        x = self.input_sw.unfold_buffer()
         t = self.input_sw.unfold_buffer_t()
-
         # Find marker onset timepoint
         idx = np.argmin(np.abs(t - self.start_eval_time))
 
@@ -226,25 +264,31 @@ class Visualisation():
 
     def run(self):
         """Retrieve input buffer, process data, compute average and push to LSL decoder stream """
+
         logger.debug(f"Updating the decoder - {self.is_decoding=}")
         while True:
             self.input_sw.update()
             self.input_mrk_sw.update()
-            print(self.input_sw.buffer)
+            self.check_if_decoding_should_start()
             x = self._create_epoch()
-            print(x[0].shape)
-            self.outlet.push_sample(x[0][0])
-            # self.outlet.push_sample(x)
-            # print(x)
-            # x = self.epochs.buffer.average() ##untested
-            # self.figure.update(self.input_sw.buffer.mean())
-            # if x[0].shape[0] > 0:
-            #     X = x
-            #     Y = x
+        
+            if self.epochstream.n_new_epochs == 0:
+                        continue  # nothing new to do
+        
+            logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
+            n += self.epochstream.n_new_epochs
 
-        # if x.shape[2] > 0:
-        #     xs = self._resample(x)
-        #     self._classify(xs)
+            data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
+            new_evoked = EvokedArray(
+                np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]
+            )
+            evoked = (
+                new_evoked
+                if evoked is None
+                else combine_evoked([evoked, new_evoked], weights="nave")
+            )
+            
+            self.outlet.push_chunk(evoked)
 
 #End of class
 def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
@@ -258,6 +302,7 @@ def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
         decoder_stream_name=cfg["streams"]["decoder_stream_name"],
         buffer_size_s=cfg["streams"]["buffer_size_s"],
         padding_size_s=cfg["streams"]["padding_size_s"],
+        start_eval_marker=cfg["streams"]["start_eval_marker"],
         max_eval_time_s=cfg["online"]["max_eval_time_s"],
         selected_channels=cfg["data"].get("selected_channels", None),
         output_port=cfg["visualisation"]["output_port"],

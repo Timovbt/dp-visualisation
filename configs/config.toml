@@ -1,6 +1,7 @@
 [streams]
 data_stream_name = 'mockup_random'
-marker_stream_name = 'stimulation-stream'
+marker_stream_name = 'mockup_random_markers' #'stimulation-stream'
+start_eval_marker = 'stimulation_start'
 decoder_stream_name = 'visualisation_decoder-stream'
 buffer_size_s = 5.0
 padding_size_s = 0.5
