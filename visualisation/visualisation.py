@@ -2,20 +2,19 @@ import numpy as np
 import time
 import toml
 import pylsl
+import mne_lsl
 from fire import Fire
 from pathlib import Path
 from dareplane_utils.stream_watcher.lsl_stream_watcher import StreamWatcher
 from dareplane_utils.general.time import sleep_s
 from dareplane_utils.signal_processing.filtering import FilterBank
-from mne_lsl.stream import EpochsStream, StreamLSL
+from mne_lsl.stream import EpochsStream, StreamLSL,BaseStream
 from mne import EvokedArray,combine_evoked
 from pylsl import StreamInlet,StreamInfo,StreamOutlet
 from visualisation.utils.logging import logger
-# from visualisation.live_plot import X,Y,run_plot
-# from visualisation.live_plot import Live_plot
 from numpy.typing import NDArray
 from scipy.signal import resample
-
+X = None
 
 class Visualisation():
     """
@@ -94,8 +93,8 @@ class Visualisation():
         info = StreamInfo(
                     name='output_average_stream',
                     type="data",
-                    channel_count=5,
-                    nominal_srate=pylsl.IRREGULAR_RATE,
+                    channel_count=350,
+                    nominal_srate=2,
                     channel_format=pylsl.cf_float32,
                     source_id="output_average_stream",
                 )
@@ -108,19 +107,21 @@ class Visualisation():
         self.connect_marker_stream()
         self.connect_data_stream()
         self.connect_epoch_stream()
-        self.create_filterbank()
+        # self.create_filterbank()
         self.run()
 
         return 0
 
     def connect_epoch_stream(self):
-         if self.input_mrk_sw != None and self.input_sw != None:
+         if self.input_mrk_stream != None and self.input_stream != None:
             self.epochstream = EpochsStream(
-                            stream = self.input_sw.inlet,
-                            bufsize = 30,
-                            event_id= 0,
-                            event_channels='Markers',
-                            event_stream = self.input_mrk_sw.inlet,
+                            stream = self.input_stream,
+                            bufsize = 10,
+                            event_id= 1,
+                            tmin=-0.2,
+                            tmax=0.5,
+                            event_channels=['0'],
+                            event_stream = self.input_mrk_stream,
                             picks = self.selected_channels
                             ).connect(acquisition_delay=0.1)
             return 0
@@ -129,37 +130,46 @@ class Visualisation():
              return 1
 
     def connect_marker_stream(self):
-        logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
-        self.input_mrk_sw = StreamWatcher(self.marker_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
-        self.input_mrk_sw.connect_to_stream()
-        if len(self.input_mrk_sw.channel_names) != 1:
-            logger.error("The marker stream should have exactly one channel.")
-            return 1
-        return 0
+        self.input_mrk_stream = StreamLSL(self.buffer_size_s,stype="Markers",name=self.marker_stream_name)
+        self.input_mrk_stream.connect(acquisition_delay=0.1,processing_flags="all")
+        print(self.input_mrk_stream.ch_names)
 
     def connect_data_stream(self):
-        logger.info(f'Connecting to data stream "{self.data_stream_name}".')
-        self.input_sw = StreamWatcher(self.data_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
-        self.input_sw.connect_to_stream()
+        self.input_stream = StreamLSL(self.buffer_size_s,stype="EEG",name=self.data_stream_name)
+        self.input_stream.connect(acquisition_delay=0.1,processing_flags="all")
 
-        self.input_sfreq = int(self.input_sw.inlet.info().nominal_srate())
-        self.input_chs_info = [dict(ch_name=ch_name, type="EEG") for ch_name in self.input_sw.channel_names]
-        print(1)
-        if self.selected_channels is None:
-            self.selected_ch_idx = list(range(len(self.input_chs_info)))
-        else:
-            if isinstance(self.selected_channels[0], str):
-                self.selected_ch_idx = [
-                    self.input_sw.channel_names.index(ch)
-                    for ch in self.selected_channels
-                ]
-            elif isinstance(self.selected_channels[0], int):
-                self.selected_ch_idx = self.selected_channels
-            else:
-                raise logger.error(f"{self.selected_channels=} must be a list of `str` or `int` or `None`.")
-            return 1
+    # def connect_marker_stream(self):
+    #     logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
+    #     self.input_mrk_sw = StreamWatcher(self.marker_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
+    #     self.input_mrk_sw.connect_to_stream()
+    #     if len(self.input_mrk_sw.channel_names) != 1:
+    #         logger.error("The marker stream should have exactly one channel.")
+    #         return 1
+    #     return 0
 
-        return 0
+    # def connect_data_stream(self):
+    #     logger.info(f'Connecting to data stream "{self.data_stream_name}".')
+    #     self.input_sw = StreamWatcher(self.data_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
+    #     self.input_sw.connect_to_stream()
+
+    #     self.input_sfreq = int(self.input_sw.inlet.info().nominal_srate())
+    #     self.input_chs_info = [dict(ch_name=ch_name, type="EEG") for ch_name in self.input_sw.channel_names]
+    #     print(1)
+    #     if self.selected_channels is None:
+    #         self.selected_ch_idx = list(range(len(self.input_chs_info)))
+    #     else:
+    #         if isinstance(self.selected_channels[0], str):
+    #             self.selected_ch_idx = [
+    #                 self.input_sw.channel_names.index(ch)
+    #                 for ch in self.selected_channels
+    #             ]
+    #         elif isinstance(self.selected_channels[0], int):
+    #             self.selected_ch_idx = self.selected_channels
+    #         else:
+    #             raise logger.error(f"{self.selected_channels=} must be a list of `str` or `int` or `None`.")
+    #         return 1
+
+    #     return 0
 
     def check_if_decoding_should_start(self):
         if self.input_mrk_sw is None:
@@ -218,6 +228,12 @@ class Visualisation():
             self.filterbank.filter(x, t)
             self.input_sw.n_new = 0  # makes sure samples are filtered only once
 
+    def _create_epochs(self):
+        x = self.input_sw.inlet.do_pull_chunk()
+        delta_t = self.input_stream.time_correction()
+        markers = self.input_mrk_sw.unfold_buffer()
+        print(markers)
+
     def _create_epoch(self) -> NDArray:
         # x = self.filterbank.get_data()[:, :, 0]
         x = self.input_sw.unfold_buffer()
@@ -262,33 +278,58 @@ class Visualisation():
 
         return x
 
+    # def epoch(self):
+    #     epoch = []
+    #     x = self.input_sw.unfold_buffer
+    #     if self.input_mrk_sw.n_new > 0:
+    #                 markers = self.input_mrk_sw.unfold_buffer()[-self.input_mrk_sw.n_new:, 0]
+    #                 markers_t = self.input_mrk_sw.unfold_buffer_t()[-self.input_mrk_sw.n_new:]
+    #     for i in range(len(markers)):
+    #         if markers[i] != 0.0:
+    #             epoch.append()
+
+
+
+
+
     def run(self):
         """Retrieve input buffer, process data, compute average and push to LSL decoder stream """
-
+        evoked = None
         logger.debug(f"Updating the decoder - {self.is_decoding=}")
         while True:
-            self.input_sw.update()
-            self.input_mrk_sw.update()
-            self.check_if_decoding_should_start()
-            x = self._create_epoch()
-        
-            if self.epochstream.n_new_epochs == 0:
-                        continue  # nothing new to do
-        
-            logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
-            n += self.epochstream.n_new_epochs
+            self.is_decoding = True
+            # self.input_sw.update()
+            # self.input_mrk_sw.update()
+            # print(self.input_mrk_sw.unfold_buffer())
+            # self._create_epochs()
+            # self.check_if_decoding_should_start()
+            if self.is_decoding:
+                # x = self._create_epoch()
+                # print(self.input_mrk_stream.ch_names)
+                # print(self.epochstream.n_new_epochs)
+                if self.epochstream.n_new_epochs == 0:
+                            continue  # nothing new to do
+                print("entered")
+                n = 1
+                logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
+                n += self.epochstream.n_new_epochs
 
-            data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
-            new_evoked = EvokedArray(
-                np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]
-            )
-            evoked = (
-                new_evoked
-                if evoked is None
-                else combine_evoked([evoked, new_evoked], weights="nave")
-            )
-            
-            self.outlet.push_chunk(evoked)
+                data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
+                new_evoked = EvokedArray(
+                    np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]
+                )
+                evoked = (
+                    new_evoked
+                    if evoked is None
+                    else combine_evoked([evoked, new_evoked], weights="nave")
+                )
+                global X
+                X= evoked.get_data()
+                # print(evoked.get_data())
+                # print(evoked.get_data().shape)
+                self.outlet.push_sample(evoked.get_data().flatten())
+            else:
+                logger.info("Waiting for decoding to start")
 
 #End of class
 def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
