@@ -1,24 +1,20 @@
 import dash
 import plotly
 import plotly.express as px
-import pandas as pd
-import random
 import numpy as np
-import pylsl
 import plotly.graph_objs as go
 from dash.dependencies import Output, Input
 from dash import html
 from dash import dcc
 from waitress import serve
 from visualisation.utils.logging import logger
-from mne_lsl.stream import StreamLSL,EpochsStream
-from mne_lsl.lsl import StreamInlet,StreamInfo,resolve_streams
+from mne_lsl.lsl import StreamInlet,resolve_streams
 
 """Script to initialize a Dash server on which to show Plotly plot"""
 
 streams = resolve_streams(name='output_average_stream')
 TIME = np.arange(-200,500,10) 
-x = px.line()
+
 app = dash.Dash(__name__)
 app.layout = html.Div(
     [
@@ -33,12 +29,13 @@ app.layout = html.Div(
 
 if len(streams) > 0:
     data_stream = StreamInlet(streams[0])
-
 else:
     data_stream = None
+    logger.DEBUG("No data-stream found")
 
 if data_stream != None:
     data_stream.open_stream()
+
 @app.callback(
     Output('live-graph', 'figure'),
     [ Input('graph-update', 'n_intervals') ]

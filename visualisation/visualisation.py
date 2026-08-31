@@ -98,7 +98,7 @@ class Visualisation():
                     channel_format=pylsl.cf_float32,
                     source_id="output_average_stream",
                 )
-        self.outlet = StreamOutlet(info)
+        self.outlet = StreamOutlet(info) #outlet for processed data
 
     def init_all(self) -> int:
         """Returns an int as this is exposed as a PCOMM `CONNECT_DECODER`"""
