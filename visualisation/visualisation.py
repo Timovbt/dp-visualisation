@@ -93,8 +93,8 @@ class Visualisation():
         info = StreamInfo(
                     name='output_average_stream',
                     type="data",
-                    channel_count=350,
-                    nominal_srate=2,
+                    channel_count=71,
+                    nominal_srate=5,
                     channel_format=pylsl.cf_float32,
                     source_id="output_average_stream",
                 )
@@ -228,108 +228,26 @@ class Visualisation():
             self.filterbank.filter(x, t)
             self.input_sw.n_new = 0  # makes sure samples are filtered only once
 
-    def _create_epochs(self):
-        x = self.input_sw.inlet.do_pull_chunk()
-        delta_t = self.input_stream.time_correction()
-        markers = self.input_mrk_sw.unfold_buffer()
-        print(markers)
-
-    def _create_epoch(self) -> NDArray:
-        # x = self.filterbank.get_data()[:, :, 0]
-        x = self.input_sw.unfold_buffer()
-        t = self.input_sw.unfold_buffer_t()
-        # Find marker onset timepoint
-        idx = np.argmin(np.abs(t - self.start_eval_time))
-
-        # Add padding interval to catch filtering artefacts
-        if self.padding_size_s is not None and self.padding_size_s > 0:
-            pad = int(self.input_sfreq * self.padding_size_s)
-            idx -= pad
-            logger.debug(f"Added {pad} samples padding to catch filter artfacts")
-
-        # Select trial relevant data
-        x = x[idx:, :].T[None, :, :]  # (1, n_channels, n_samples)
-        logger.debug(f"Created epoch of shape {x.shape} (n_trials x n_channels x n_samples).")
-
-        if np.isnan(x).sum() > 0:
-            logger.error("NaNs found after epoching.")
-
-        return x
-
-    def _resample(self, x: NDArray) -> NDArray:
-
-        if self.classifier_input_sfreq is not None:
-            logger.debug(f"The data x is of shape {x.shape} (n_trials x n_channels x n_samples) before resample.")
-            x = resample(
-                x,
-                num=int(x.shape[2] / self.input_sfreq * self.classifier_input_sfreq),
-                axis=2,
-            )
-            logger.debug(f"The data x is of shape {x.shape} (n_trials x n_channels x n_samples) after resample.")
-
-            # Remove padding interval to catch filtering artefacts
-            if self.padding_size_s is not None and self.padding_size_s > 0:
-                pad = int(self.classifier_input_sfreq * self.padding_size_s)
-                x = x[:, :, pad:]
-                logger.debug(f"Removed {pad} samples padding to catch filter artfacts")
-
-            if np.isnan(x).sum() > 0:
-                logger.error("NaNs found after resampling")
-
-        return x
-
-    # def epoch(self):
-    #     epoch = []
-    #     x = self.input_sw.unfold_buffer
-    #     if self.input_mrk_sw.n_new > 0:
-    #                 markers = self.input_mrk_sw.unfold_buffer()[-self.input_mrk_sw.n_new:, 0]
-    #                 markers_t = self.input_mrk_sw.unfold_buffer_t()[-self.input_mrk_sw.n_new:]
-    #     for i in range(len(markers)):
-    #         if markers[i] != 0.0:
-    #             epoch.append()
-
-
-
-
-
     def run(self):
         """Retrieve input buffer, process data, compute average and push to LSL decoder stream """
         evoked = None
         logger.debug(f"Updating the decoder - {self.is_decoding=}")
         while True:
-            self.is_decoding = True
-            # self.input_sw.update()
-            # self.input_mrk_sw.update()
-            # print(self.input_mrk_sw.unfold_buffer())
-            # self._create_epochs()
-            # self.check_if_decoding_should_start()
-            if self.is_decoding:
-                # x = self._create_epoch()
-                # print(self.input_mrk_stream.ch_names)
-                # print(self.epochstream.n_new_epochs)
-                if self.epochstream.n_new_epochs == 0:
-                            continue  # nothing new to do
-                print("entered")
-                n = 1
-                logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
-                n += self.epochstream.n_new_epochs
+            if self.epochstream.n_new_epochs == 0:
+                        continue  # nothing new to do
+            n = 1
+            logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
+            n += self.epochstream.n_new_epochs
 
-                data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
-                new_evoked = EvokedArray(
-                    np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]
-                )
-                evoked = (
-                    new_evoked
-                    if evoked is None
-                    else combine_evoked([evoked, new_evoked], weights="nave")
-                )
-                global X
-                X= evoked.get_data()
-                # print(evoked.get_data())
-                # print(evoked.get_data().shape)
-                self.outlet.push_sample(evoked.get_data().flatten())
-            else:
-                logger.info("Waiting for decoding to start")
+            data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
+            epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).filter(self.band[0],self.band[1]).resample(100)
+            evoked = (epoch_average if evoked is None else combine_evoked([evoked, epoch_average], weights="nave"))
+        
+            x = evoked.get_data().flatten()
+            n = np.array([evoked.nave])
+            self.outlet.push_sample(np.concat((n,x),axis=0))
+
+
 
 #End of class
 def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
