@@ -90,15 +90,7 @@ class Visualisation():
         self.output_sw: StreamWatcher | None = None
         self.classifier_input_sfreq = None
 
-        info = StreamInfo(
-                    name='output_average_stream',
-                    type="data",
-                    channel_count=71,
-                    nominal_srate=5,
-                    channel_format=pylsl.cf_float32,
-                    source_id="output_average_stream",
-                )
-        self.outlet = StreamOutlet(info) #outlet for processed data
+        
 
     def init_all(self) -> int:
         """Returns an int as this is exposed as a PCOMM `CONNECT_DECODER`"""
@@ -106,11 +98,23 @@ class Visualisation():
         logger.info("initializing decoder")
         self.connect_marker_stream()
         self.connect_data_stream()
+        self.connect_output_stream()
         self.connect_epoch_stream()
         # self.create_filterbank()
         self.run()
 
         return 0
+
+    def connect_output_stream(self):
+        info = StreamInfo(
+                            name='output_average_stream',
+                            type="data",
+                            channel_count=70*3+1,
+                            nominal_srate=5,
+                            channel_format=pylsl.cf_float32,
+                            source_id="output_average_stream",
+                        )
+        self.outlet = StreamOutlet(info) #outlet for processed data
 
     def connect_epoch_stream(self):
          if self.input_mrk_stream != None and self.input_stream != None:
@@ -137,6 +141,7 @@ class Visualisation():
     def connect_data_stream(self):
         self.input_stream = StreamLSL(self.buffer_size_s,stype="EEG",name=self.data_stream_name)
         self.input_stream.connect(acquisition_delay=0.1,processing_flags="all")
+        self.input_stream.filter(self.band[0],self.band[1])
 
     # def connect_marker_stream(self):
     #     logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
@@ -238,14 +243,14 @@ class Visualisation():
             n = 1
             logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
             n += self.epochstream.n_new_epochs
-
             data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
-            epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).filter(self.band[0],self.band[1]).resample(100)
+            print(data.shape)
+            epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(100) #.filter(self.band[0],self.band[1])
             evoked = (epoch_average if evoked is None else combine_evoked([evoked, epoch_average], weights="nave"))
         
-            x = evoked.get_data().flatten()
+            self.x = evoked.get_data().flatten()
             n = np.array([evoked.nave])
-            self.outlet.push_sample(np.concat((n,x),axis=0))
+            self.outlet.push_sample(np.concat((n,self.x),axis=0))
 
 
 

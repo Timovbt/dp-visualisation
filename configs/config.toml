@@ -1,5 +1,5 @@
 [streams]
-data_stream_name = 'mockup_random'
+data_stream_name = 'mockup_random1'
 marker_stream_name = 'stimulation_marker_stream'
 start_eval_marker = 'stimulation_start'
 decoder_stream_name = 'visualisation_decoder-stream'
@@ -12,7 +12,7 @@ tmin_s = 0.0
 tmax_s = 4.2
 
 [data]
-#selected_channels = ['Oz']
+selected_channels = ["all"] #['Oz',"Pz"]
 capfile = "./cvep_decoder/caps/biosemi7.loc"
 target_freq_hz = 120
 passband_hz = [6, 40]

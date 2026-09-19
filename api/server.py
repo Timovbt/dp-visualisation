@@ -7,7 +7,7 @@ from visualisation.utils.logging import logger
 from dareplane_utils.default_server.server import DefaultServer
 
 
-def main(port: int = 8087, ip: str = "127.0.0.1", loglevel: int = 10,
+def main(port: int = 8084, ip: str = "127.0.0.1", loglevel: int = 10,
          conf_pth: Path = Path("./configs/config.toml"),):
     logger.setLevel(loglevel)
     logger.debug(f"Initializing decoder with {conf_pth=}")
