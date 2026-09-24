@@ -1,5 +1,5 @@
 [streams]
-data_stream_name = 'mockup_random1'
+data_stream_name = 'mockup_EEG_stream'
 marker_stream_name = 'stimulation_marker_stream'
 start_eval_marker = 'stimulation_start'
 decoder_stream_name = 'visualisation_decoder-stream'

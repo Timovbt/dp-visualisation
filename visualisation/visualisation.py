@@ -15,7 +15,7 @@ from visualisation.utils.logging import logger
 from numpy.typing import NDArray
 from scipy.signal import resample
 X = None
-
+channel_names = []
 class Visualisation():
     """
     Object to decode LSL-stream and send analysed data to Live_plot
@@ -109,7 +109,7 @@ class Visualisation():
         info = StreamInfo(
                             name='output_average_stream',
                             type="data",
-                            channel_count=70*3+1,
+                            channel_count=70*10+1,
                             nominal_srate=5,
                             channel_format=pylsl.cf_float32,
                             source_id="output_average_stream",
@@ -143,6 +143,10 @@ class Visualisation():
         self.input_stream.connect(acquisition_delay=0.1,processing_flags="all")
         self.input_stream.filter(self.band[0],self.band[1])
 
+        global channel_names
+        names = self.input_stream.sinfo.get_channel_names()
+        channel_names = names if names != None else [i for i in range((self.input_stream.sinfo.n_channels))]
+        print(channel_names)
     # def connect_marker_stream(self):
     #     logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
     #     self.input_mrk_sw = StreamWatcher(self.marker_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)

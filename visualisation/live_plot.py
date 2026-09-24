@@ -1,20 +1,22 @@
 import dash
 import plotly
+import threading
 import plotly.express as px
 import numpy as np
 import plotly.graph_objs as go
+from pathlib import Path
 from dash.dependencies import Output, Input
 from dash import html
 from dash import dcc
 from waitress import serve
 from visualisation.utils.logging import logger
 from mne_lsl.lsl import StreamInlet,resolve_streams
-
+from visualisation.visualisation import visualisation_factory
 """Script to initialize a Dash server on which to show Plotly plot"""
-
-
+channel_names = [i for i in range(10)]
 TIME = np.arange(-200,500,10) 
 data_stream = None
+channels = [{'label':name,'value':i} for i,name in enumerate(channel_names)]
 
 app = dash.Dash(__name__)
 app.layout = html.Div(
@@ -25,19 +27,23 @@ app.layout = html.Div(
             interval = 1000,
             n_intervals = 0
         ),
+        dcc.Dropdown( id = 'dropdown_channels',
+        options=channels,
+        value=0,multi=True
+    ),
     ]
 )
 
 @app.callback(
     Output('live-graph', 'figure'),
-    [ Input('graph-update', 'n_intervals') ]
+    [Input('dropdown_channels','value')]
 )
-def update_graph(n):
+def update_graph(channels_):
     """
     Function to update the graph with new data from the LSL stream, 
     this function is automatically called by the dash server
     """
-    channels = 3
+    channels = 10
     custom_theme = dict(
     layout=go.Layout()
     )
@@ -45,7 +51,8 @@ def update_graph(n):
         buf_data = data_stream.pull_sample()
         print(buf_data[0].shape)
         N = buf_data[0][0] #number of epochs used for average
-        EEG_average = buf_data[0][1:].reshape(channels,70) 
+        EEG_average = buf_data[0][1:].reshape(channels,70)
+        print(EEG_average) 
         print((EEG_average.shape))
         fig = px.line(
                 x=TIME, #name='Scatter',
@@ -57,13 +64,15 @@ def update_graph(n):
         xaxis_title="Time (ms)", yaxis_title="\u03bcV"
         )#.update_traces(line_color="#181896")
         fig.add_vline(0, line_color='red')
-        fig.add_scatter(x=TIME,y=list(EEG_average[2,:70]),mode='lines')
+        for i in channels_:
+            fig.add_scatter(x=TIME,y=list(EEG_average[i,:70]),mode='lines')
 
         return fig #{'data': [data],
                 #    'layout' : go.Layout(xaxis=dict(range=[TIME[0],TIME[-1]]),yaxis = dict(range = [min(EEG_average[0,:70]),max(EEG_average[0,:70])]),title=title)}
 
 def connect_stream():
     global data_stream
+    print("entered")
     streams = resolve_streams(name='output_average_stream')
     if len(streams) > 0:
         data_stream = StreamInlet(streams[0])
@@ -83,8 +92,22 @@ def run_plot(host='127.0.0.1',port=8088):
         output port for the dash server
     """
     connect_stream()
-    serve(app,host=host,port=port)
+    # decoder = visualisation_factory(Path("./configs/config.toml"))
 
+    # x= threading.Thread(targer=decoder.init_all)
+    # y= threading.Thread(target=serve,args=(app,host,port))
+    # x.start()
+    # y.start()
+    serve(app, host='127.0.0.1', port=8088)
 if __name__ == "__main__":
+    # host='127.0.0.1'
+    # port=8088
+    # decoder = visualisation_factory(Path("./configs/config.toml"))
     connect_stream()
+    # serve(app, host='127.0.0.1', port=8088)
+    # x = threading.Thread(target=decoder.init_all)
+    # y = threading.Thread(target=serve,kwargs={"app":app,"host":host,"port":port})
+    
+    # x.run()
+    # y.run()
     serve(app, host='127.0.0.1', port=8088)
