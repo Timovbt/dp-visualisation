@@ -14,8 +14,7 @@ from pylsl import StreamInlet,StreamInfo,StreamOutlet
 from visualisation.utils.logging import logger
 from numpy.typing import NDArray
 from scipy.signal import resample
-X = None
-channel_names = []
+
 class Visualisation():
     """
     Object to decode LSL-stream and send analysed data to Live_plot
@@ -55,7 +54,6 @@ class Visualisation():
             buffer_size_s: float,
             padding_size_s: float,
             start_eval_marker: str,
-            max_eval_time_s: int,
             t_sleep_s: float = 0.1,
             selected_channels: list[str] | None = None,
             output_port: int=8088,
@@ -65,12 +63,12 @@ class Visualisation():
         
         self.marker_stream_name = marker_stream_name
         self.data_stream_name = data_stream_name
+        self.decoder_stream_name = decoder_stream_name
         self.buffer_size_s = buffer_size_s
         self.padding_size_s = padding_size_s
         self.start_eval_marker = start_eval_marker
         self.t_sleep_s = t_sleep_s
         self.selected_channels = selected_channels
-        self.max_eval_time_s = max_eval_time_s
         self.output_port = output_port
         self.output_address = output_address
         self.band = band
@@ -107,13 +105,19 @@ class Visualisation():
 
     def connect_output_stream(self):
         info = StreamInfo(
-                            name='output_average_stream',
+                            name=self.decoder_stream_name,
                             type="data",
                             channel_count=70*10+1,
                             nominal_srate=5,
                             channel_format=pylsl.cf_float32,
                             source_id="output_average_stream",
                         )
+        # info._set_channel_info(ch_infos=self.channel_names,name='chn')
+        channels = info.desc().append_child("channels")
+        for i in self.channel_names:
+            channels.append_child_value('channel',i)
+            # channel.set_value(i)
+
         self.outlet = StreamOutlet(info) #outlet for processed data
 
     def connect_epoch_stream(self):
@@ -142,11 +146,10 @@ class Visualisation():
         self.input_stream = StreamLSL(self.buffer_size_s,stype="EEG",name=self.data_stream_name)
         self.input_stream.connect(acquisition_delay=0.1,processing_flags="all")
         self.input_stream.filter(self.band[0],self.band[1])
-
-        global channel_names
+        self.input_stream.sinfo.set_channel_names(['a','b','c','d','e', 'f','g','h','i','j'])
         names = self.input_stream.sinfo.get_channel_names()
-        channel_names = names if names != None else [i for i in range((self.input_stream.sinfo.n_channels))]
-        print(channel_names)
+        self.channel_names = names if names != None else [str(i) for i in range((self.input_stream.sinfo.n_channels))]
+
     # def connect_marker_stream(self):
     #     logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
     #     self.input_mrk_sw = StreamWatcher(self.marker_stream_name, buffer_size_s=self.buffer_size_s, logger=logger)
@@ -271,7 +274,6 @@ def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
         buffer_size_s=cfg["streams"]["buffer_size_s"],
         padding_size_s=cfg["streams"]["padding_size_s"],
         start_eval_marker=cfg["streams"]["start_eval_marker"],
-        max_eval_time_s=cfg["online"]["max_eval_time_s"],
         selected_channels=cfg["data"].get("selected_channels", None),
         output_port=cfg["visualisation"]["output_port"],
         output_address=cfg["visualisation"]["output_address"],
