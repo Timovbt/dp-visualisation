@@ -107,16 +107,16 @@ class Visualisation():
         info = StreamInfo(
                             name=self.decoder_stream_name,
                             type="data",
-                            channel_count=70*10+1,
+                            channel_count=70*self.n_channels+1,
                             nominal_srate=5,
                             channel_format=pylsl.cf_float32,
                             source_id="output_average_stream",
                         )
-        # info._set_channel_info(ch_infos=self.channel_names,name='chn')
+        
         channels = info.desc().append_child("channels")
         for i in self.channel_names:
             channels.append_child_value('channel',i)
-            # channel.set_value(i)
+
 
         self.outlet = StreamOutlet(info) #outlet for processed data
 
@@ -149,6 +149,7 @@ class Visualisation():
         self.input_stream.sinfo.set_channel_names(['a','b','c','d','e', 'f','g','h','i','j'])
         names = self.input_stream.sinfo.get_channel_names()
         self.channel_names = names if names != None else [str(i) for i in range((self.input_stream.sinfo.n_channels))]
+        self.n_channels = self.input_stream.sinfo.n_channels
 
     # def connect_marker_stream(self):
     #     logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
