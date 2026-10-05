@@ -146,7 +146,7 @@ class Visualisation():
         self.input_stream = StreamLSL(self.buffer_size_s,stype="EEG",name=self.data_stream_name)
         self.input_stream.connect(acquisition_delay=0.1,processing_flags="all")
         self.input_stream.filter(self.band[0],self.band[1])
-        self.input_stream.sinfo.set_channel_names(['a','b','c','d','e', 'f','g','h','i','j'])
+
         names = self.input_stream.sinfo.get_channel_names()
         self.channel_names = names if names != None else [str(i) for i in range((self.input_stream.sinfo.n_channels))]
         self.n_channels = self.input_stream.sinfo.n_channels
