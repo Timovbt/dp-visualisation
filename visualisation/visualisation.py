@@ -55,7 +55,8 @@ class Visualisation():
             padding_size_s: float,
             start_eval_marker: str,
             t_sleep_s: float = 0.1,
-            selected_channels: list[str] | None = None,
+            selected_channels: list | None = None,
+            selected_channel_names: list[str]| None= None,
             output_port: int=8088,
             output_address:str="127.0.0.1",
             band: list[int] = [6,40]
@@ -69,6 +70,7 @@ class Visualisation():
         self.start_eval_marker = start_eval_marker
         self.t_sleep_s = t_sleep_s
         self.selected_channels = selected_channels
+        self.selected_channel_names = selected_channel_names
         self.output_port = output_port
         self.output_address = output_address
         self.band = band
@@ -87,6 +89,8 @@ class Visualisation():
         self.filterbank: FilterBank | None = None
         self.output_sw: StreamWatcher | None = None
         self.classifier_input_sfreq = None
+        self.evoked = None
+        self.reset = False
 
         
 
@@ -147,7 +151,7 @@ class Visualisation():
         self.input_stream.connect(acquisition_delay=0.1,processing_flags="all")
         self.input_stream.filter(self.band[0],self.band[1])
 
-        names = self.input_stream.sinfo.get_channel_names()
+        names = self.selected_channel_names
         self.channel_names = names if names != None else [str(i) for i in range((self.input_stream.sinfo.n_channels))]
         self.n_channels = self.input_stream.sinfo.n_channels
 
@@ -245,22 +249,29 @@ class Visualisation():
         """Retrieve input buffer, process data, compute average and push to LSL decoder stream """
         evoked = None
         logger.debug(f"Updating the decoder - {self.is_decoding=}")
+        self.n = 0
         while True:
             if self.epochstream.n_new_epochs == 0:
                         continue  # nothing new to do
-            n = 1
-            logger.info("Got %s / %s new epochs.", self.epochstream.n_new_epochs, n)
-            n += self.epochstream.n_new_epochs
+            if self.reset:
+                self.evoked = None
+                self.n = 1
+            logger.info("Got %s new epochs.", self.epochstream.n_new_epochs)
+            self.n += self.epochstream.n_new_epochs
             data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
             print(data.shape)
             epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(100) #.filter(self.band[0],self.band[1])
-            evoked = (epoch_average if evoked is None else combine_evoked([evoked, epoch_average], weights="nave"))
+            self.evoked = (epoch_average if self.evoked is None else combine_evoked([self.evoked, epoch_average], weights="nave"))
         
-            self.x = evoked.get_data().flatten()
-            n = np.array([evoked.nave])
-            self.outlet.push_sample(np.concat((n,self.x),axis=0))
+            self.x = self.evoked.get_data().flatten()
+            self.n = np.array([self.evoked.nave])
+            self.outlet.push_sample(np.concat((self.n,self.x),axis=0))
 
-
+    def reset(self):
+        """
+        Reset the running average
+        """
+        self.reset = True
 
 #End of class
 def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
@@ -276,6 +287,7 @@ def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
         padding_size_s=cfg["streams"]["padding_size_s"],
         start_eval_marker=cfg["streams"]["start_eval_marker"],
         selected_channels=cfg["data"].get("selected_channels", None),
+        selected_channel_names=cfg['data'].get("selected_channel_names", None),
         output_port=cfg["visualisation"]["output_port"],
         output_address=cfg["visualisation"]["output_address"],
         band = cfg["data"]["passband_hz"]

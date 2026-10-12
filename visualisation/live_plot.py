@@ -56,14 +56,15 @@ def update_graph(selected_channels,n):
                 title = f"Number of epochs {int(N)}"
                 #mode= 'lines'
         ).update_layout(
-        xaxis_title="Time (ms)", yaxis_title="\u03bcV"
+        xaxis_title="Time (ms)", yaxis_title="\u03bcV",
+        legend=dict(font=dict(size=16))
         )
 
         fig.add_vline(0, line_color='black',line_width=3)
 
         if len(selected_channels) > 1:
             for i in selected_channels:
-                fig.add_scatter(x=TIME,y=list(EEG_average[i,:70]),mode='lines')
+                fig.add_scatter(x=TIME,y=list(EEG_average[i,:70]),mode='lines',name=channel_names[i])
 
         return fig 
 
