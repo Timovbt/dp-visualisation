@@ -111,7 +111,7 @@ class Visualisation():
         info = StreamInfo(
                             name=self.decoder_stream_name,
                             type="data",
-                            channel_count=70*self.n_channels+1,
+                            channel_count=70*len(self.selected_channels)+1,
                             nominal_srate=5,
                             channel_format=pylsl.cf_float32,
                             source_id="output_average_stream",

@@ -93,7 +93,6 @@ def connect_stream():
             channel = next_channel
          
         print(channel_names)
-
         global channels
         channels = [{'label':name,'value':i} for i,name in enumerate(channel_names)]
     app.layout = html.Div(
