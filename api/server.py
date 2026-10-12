@@ -7,7 +7,7 @@ import visualisation
 from dareplane_utils.default_server.server import DefaultServer
 
 
-def main(port: int = 8084, ip: str = "127.0.0.1", loglevel: int = 10,
+def main(port: int = 8082, ip: str = "127.0.0.1", loglevel: int = 10,
          conf_pth: Path = Path("./configs/config.toml"),):
     logger.setLevel(loglevel)
     logger.debug(f"Initializing decoder with {conf_pth=}")
@@ -16,7 +16,8 @@ def main(port: int = 8084, ip: str = "127.0.0.1", loglevel: int = 10,
 
     pcommand_map = {
         "CONNECT_DECODER": decoder.init_all,
-        "CONNECT_VISUALISATION_SERVER": visualisation.live_plot.run_plot,
+        # "CONNECT_VISUALISATION_SERVER": visualisation.live_plot.run_plot,
+        "Reset":decoder.reset
     }
 
     server = DefaultServer(

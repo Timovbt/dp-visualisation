@@ -1,16 +1,16 @@
 [streams]
-data_stream_name = 'mockup_EEG_stream'
+data_stream_name = 'mockup_random2'
 marker_stream_name = 'stimulation_marker_stream'
 start_eval_marker = 'stimulation_start'
-decoder_stream_name = 'visualisation_decoder-stream'
+decoder_stream_name = 'output-average-stream'
 buffer_size_s = 5.0
 padding_size_s = 0.5
 
 
 [data]
 selected_channels = ["all"] #['Oz',"Pz"]
+selected_channel_names = ['Fz','O1','Pz','POz','Oz','O2']
 capfile = "./cvep_decoder/caps/biosemi7.loc"
-target_freq_hz = 120
 passband_hz = [6, 40]
 
 

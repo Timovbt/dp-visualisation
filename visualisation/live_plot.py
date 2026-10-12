@@ -71,7 +71,7 @@ def update_graph(selected_channels,n):
 def connect_stream():
     global data_stream
     global channel_names
-    streams = resolve_streams(name='visualisation_decoder-stream')
+    streams = resolve_streams(name='output-average-stream')
     if len(streams) > 0:
         data_stream = StreamInlet(streams[0])
     else:
