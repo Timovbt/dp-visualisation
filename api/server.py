@@ -4,6 +4,7 @@ from visualisation.visualisation import visualisation_factory
 from visualisation.live_plot import run_plot
 from visualisation.utils.logging import logger
 import visualisation
+import subprocess
 from dareplane_utils.default_server.server import DefaultServer
 
 
@@ -16,8 +17,9 @@ def main(port: int = 8082, ip: str = "127.0.0.1", loglevel: int = 10,
 
     pcommand_map = {
         "CONNECT_DECODER": decoder.init_all,
+        "CONNECT_": decoder.plot,
         # "CONNECT_VISUALISATION_SERVER": visualisation.live_plot.run_plot,
-        "Reset":decoder.reset
+        # "CONNECT_VISUALISATION":subprocess.run(['python','-m', 'visualisation.live_plot'])
     }
 
     server = DefaultServer(

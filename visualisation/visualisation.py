@@ -90,6 +90,7 @@ class Visualisation():
         self.output_sw: StreamWatcher | None = None
         self.classifier_input_sfreq = None
         self.evoked = None
+        self.evoked_std = None
         self.reset = False
 
         
@@ -103,15 +104,20 @@ class Visualisation():
         self.connect_output_stream()
         self.connect_epoch_stream()
         # self.create_filterbank()
+        self.plot()
         self.run()
 
         return 0
+
+    def plot(self):
+        import subprocess
+        subprocess.Popen(['python','-m', 'visualisation.live_plot'],shell=True)
 
     def connect_output_stream(self):
         info = StreamInfo(
                             name=self.decoder_stream_name,
                             type="data",
-                            channel_count=70*len(self.selected_channels)+1,
+                            channel_count=2*280*len(self.selected_channels)+2,
                             nominal_srate=5,
                             channel_format=pylsl.cf_float32,
                             source_id="output_average_stream",
@@ -154,6 +160,7 @@ class Visualisation():
         names = self.selected_channel_names
         self.channel_names = names if names != None else [str(i) for i in range((self.input_stream.sinfo.n_channels))]
         self.n_channels = self.input_stream.sinfo.n_channels
+        self.n_channels_arr = np.array([len(self.selected_channels)])
 
     # def connect_marker_stream(self):
     #     logger.info(f'Connecting to marker stream "{self.marker_stream_name}".')
@@ -247,9 +254,10 @@ class Visualisation():
 
     def run(self):
         """Retrieve input buffer, process data, compute average and push to LSL decoder stream """
-        evoked = None
         logger.debug(f"Updating the decoder - {self.is_decoding=}")
         self.n = 0
+        self.sum_squared = 0 
+        self.sum_x = None
         while True:
             if self.epochstream.n_new_epochs == 0:
                         continue  # nothing new to do
@@ -260,12 +268,43 @@ class Visualisation():
             self.n += self.epochstream.n_new_epochs
             data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
             print(data.shape)
-            epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(100) #.filter(self.band[0],self.band[1])
+            epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400) #.filter(self.band[0],self.band[1])
             self.evoked = (epoch_average if self.evoked is None else combine_evoked([self.evoked, epoch_average], weights="nave"))
-        
-            self.x = self.evoked.get_data().flatten()
+
+            #std computation
+            batch_sum = np.sum(data, axis=0)
+            batch_sum2 = np.sum(data ** 2, axis=0)
+
+            if self.sum_x is None:
+                self.sum_x = batch_sum
+                self.sum_x2 = batch_sum2
+                self.count = data.shape[0]
+            else:
+                self.sum_x += batch_sum
+                self.sum_x2 += batch_sum2
+                self.count += data.shape[0]
+
+            mean = self.sum_x / self.count
+            var = self.sum_x2 / self.count - mean**2
+
+            # Numerical safety
+            var = np.maximum(var, 0)
+
+            std = np.sqrt(var)
+
+            self.evoked_std = EvokedArray(
+                std,
+                self.epochstream.info,
+                nave=self.count,
+            ).resample(400)
+
             self.n = np.array([self.evoked.nave])
-            self.outlet.push_sample(np.concat((self.n,self.x),axis=0))
+            self.average = self.evoked.get_data()
+
+            var = self.sum_squared / self.n - self.average**2
+            self.std = self.average/np.sqrt(self.n)#np.sqrt(np.maximum(var, 0))
+            print(self.average.shape)
+            self.outlet.push_sample(np.concat((self.n,self.n_channels_arr,self.average.flatten(),self.evoked_std.get_data().flatten()),axis=0))
 
     def reset(self):
         """

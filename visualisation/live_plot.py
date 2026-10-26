@@ -3,6 +3,7 @@ import plotly
 import threading
 import plotly.express as px
 import numpy as np
+import toml
 import plotly.graph_objs as go
 from pathlib import Path
 from dash.dependencies import Output, Input
@@ -13,14 +14,11 @@ from visualisation.utils.logging import logger
 from mne_lsl.lsl import StreamInlet,resolve_streams
 from visualisation.visualisation import visualisation_factory
 """Script to initialize a Dash server on which to show Plotly plot"""
-channel_names = []#[i for i in range(10)]
-# channels = []
-TIME = np.arange(-200,500,10) 
-# data_stream = None
-# channels = [{'label':name,'value':i} for i,name in enumerate(channel_names)]
-# print(channels)
-# print(channels)
-# channel_names = []
+channel_names = []
+
+
+TIME = np.arange(-200,500,2.5) 
+
 custom_theme = dict(
     layout=go.Layout()
     )
@@ -42,31 +40,41 @@ def update_graph(selected_channels,n):
     global custom_theme
     if data_stream != None:
         buf_data = data_stream.pull_sample()
-        N = buf_data[0][0] #number of epochs used for average
+        if buf_data[0].shape[0] > 0:
+            N = buf_data[0][0] #number of epochs used for average
+            n_channels = int(buf_data[0][1])
+            EEG_average = buf_data[0][2:(280*n_channels)+2].reshape(n_channels,280)
+            EEG_std = buf_data[0][2+(n_channels*280):].reshape(n_channels,280)
 
-        EEG_average = buf_data[0][1:].reshape(-1,70)
-  
-        if type(selected_channels) == int: #when only 1 selected
-                selected_channels = [selected_channels]
+            if type(selected_channels) == int: #when only 1 selected
+                    selected_channels = [selected_channels]
 
-        fig = px.line(
-                x=TIME, #name='Scatter',
-                y=list(EEG_average[selected_channels[0],:70]),
-                template=custom_theme,
-                title = f"Number of epochs {int(N)}"
-                #mode= 'lines'
-        ).update_layout(
-        xaxis_title="Time (ms)", yaxis_title="\u03bcV",
-        legend=dict(font=dict(size=16))
-        )
+            fig = px.line(
+                    x=TIME, #name='Scatter',
+                    y=list(EEG_average[selected_channels[0],:]),
+                    template=custom_theme,
+                    title = f"Number of epochs {int(N)}"
+                    #mode= 'lines'
+            ).update_layout(
+            xaxis_title="Time (ms)", yaxis_title="\u03bcV",
+            legend=dict(font=dict(size=16))
+            )
 
-        fig.add_vline(0, line_color='black',line_width=3)
+            fig.add_vline(0, line_color='black',line_width=3)
 
-        if len(selected_channels) > 1:
-            for i in selected_channels:
-                fig.add_scatter(x=TIME,y=list(EEG_average[i,:70]),mode='lines',name=channel_names[i])
+            if len(selected_channels) > 1:
+                for i in selected_channels:
+                    fig.add_scatter(x=TIME,
+                                    y=list(EEG_average[i,:]),
+                                    mode='lines',name=channel_names[i])
+                    fig.add_scatter(x=TIME,
+                                    y=list(EEG_average[i,:] + EEG_std[i,:]),
+                                    mode='lines',line={'width':1})
+                    fig.add_scatter(x=TIME,
+                                    y=list(EEG_average[i,:] - EEG_std[i,:]),
+                                    mode='lines',fill="tonexty",line={'width':1})
 
-        return fig 
+            return fig 
 
 def connect_stream():
     global data_stream
