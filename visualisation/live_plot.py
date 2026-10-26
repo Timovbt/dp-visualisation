@@ -67,12 +67,12 @@ def update_graph(selected_channels,n):
                     fig.add_scatter(x=TIME,
                                     y=list(EEG_average[i,:]),
                                     mode='lines',name=channel_names[i])
-                    fig.add_scatter(x=TIME,
-                                    y=list(EEG_average[i,:] + EEG_std[i,:]),
-                                    mode='lines',line={'width':1})
-                    fig.add_scatter(x=TIME,
-                                    y=list(EEG_average[i,:] - EEG_std[i,:]),
-                                    mode='lines',fill="tonexty",line={'width':1})
+                    # fig.add_scatter(x=TIME,
+                    #                 y=list(EEG_average[i,:] + EEG_std[i,:]),
+                    #                 mode='lines',line={'width':1})
+                    # fig.add_scatter(x=TIME,
+                    #                 y=list(EEG_average[i,:] - EEG_std[i,:]),
+                    #                 mode='lines',fill="tonexty",line={'width':1})
 
             return fig 
 
