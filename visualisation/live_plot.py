@@ -39,49 +39,55 @@ def update_graph(selected_channels,n):
     # )
     global custom_theme
     if data_stream != None:
-        buf_data = data_stream.pull_sample()
-        if buf_data[0].shape[0] > 0:
-            N = buf_data[0][0] #number of epochs used for average
-            n_channels = int(buf_data[0][1])
-            EEG_average = buf_data[0][2:(280*n_channels)+2].reshape(n_channels,280)
-            EEG_std = buf_data[0][2+(n_channels*280):].reshape(n_channels,280)
+        if data_stream.samples_available == 0:
+            pass
+        else:
+            buf_data = data_stream.pull_sample()
+            if buf_data[0].shape[0] > 0:
+                N = buf_data[0][0] #number of epochs used for average
+                n_channels = int(buf_data[0][1])
+                reset = buf_data[0][2]
+                if N > 10:
+                    data_stream.pull_chunk(max_samples=2)
 
-            if type(selected_channels) == int: #when only 1 selected
-                    selected_channels = [selected_channels]
+                EEG_average = buf_data[0][3:(280*n_channels)+3].reshape(n_channels,280)
+                EEG_std = buf_data[0][3+(n_channels*280):].reshape(n_channels,280)
 
-            fig = px.line(
-                    x=TIME, #name='Scatter',
-                    y=list(EEG_average[selected_channels[0],:]),
-                    template=custom_theme,
-                    title = f"Number of epochs {int(N)}"
-                    #mode= 'lines'
-            ).update_layout(
-            xaxis_title="Time (ms)", yaxis_title="\u03bcV",
-            legend=dict(font=dict(size=16))
-            )
+                if type(selected_channels) == int: #when only 1 selected
+                        selected_channels = [selected_channels]
 
-            fig.add_vline(0, line_color='black',line_width=3)
+                fig = px.line(
+                        x=TIME, #name='Scatter',
+                        y=list(EEG_average[selected_channels[0],:]),
+                        template=custom_theme,
+                        title = f"Number of epochs {int(N)}"
+                        #mode= 'lines'
+                ).update_layout(
+                xaxis_title="Time (ms)", yaxis_title="\u03bcV",
+                legend=dict(font=dict(size=16))
+                )
 
-            if len(selected_channels) > 1:
-                for i in selected_channels:
-                    fig.add_scatter(x=TIME,
-                                    y=list(EEG_average[i,:]),
-                                    mode='lines',name=channel_names[i])
-                    # fig.add_scatter(x=TIME,
-                    #                 y=list(EEG_average[i,:] + EEG_std[i,:]),
-                    #                 mode='lines',line={'width':1})
-                    # fig.add_scatter(x=TIME,
-                    #                 y=list(EEG_average[i,:] - EEG_std[i,:]),
-                    #                 mode='lines',fill="tonexty",line={'width':1})
+                fig.add_vline(0, line_color='black',line_width=3)
 
-            return fig 
+                if len(selected_channels) > 1:
+                    for i in selected_channels:
+                        fig.add_scatter(x=TIME,
+                                        y=list(EEG_average[i,:]),
+                                        mode='lines',name=channel_names[i])
+                        # fig.add_scatter(x=TIME,
+                        #                 y=list(EEG_average[i,:] + EEG_std[i,:]),
+                        #                 mode='lines',line={'width':1})
+                        # fig.add_scatter(x=TIME,
+                        #                 y=list(EEG_average[i,:] - EEG_std[i,:]),
+                        #                 mode='lines',fill="tonexty",line={'width':1})
+                return fig 
 
 def connect_stream():
     global data_stream
     global channel_names
     streams = resolve_streams(name='output-average-stream')
     if len(streams) > 0:
-        data_stream = StreamInlet(streams[0])
+        data_stream = StreamInlet(streams[0],max_buffered=1)
     else:
         data_stream = None
     logger.info("No data-stream found")
@@ -108,7 +114,7 @@ def connect_stream():
         dcc.Graph(id = 'live-graph', animate = False),
         dcc.Interval(
             id = 'graph-update',
-            interval = 1000,
+            interval = 700,
             n_intervals = 0
         ),
         dcc.Dropdown( id = 'dropdown_channels',
