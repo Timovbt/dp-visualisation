@@ -16,6 +16,7 @@ def main(port: int = 8082, ip: str = "127.0.0.1", loglevel: int = 10,
     decoder = visualisation_factory(conf_pth)
 
     pcommand_map = {
+        "oddball": decoder.set_oddball,
         "CONNECT_DECODER": decoder.init_all,
         "CONNECT_": decoder.plot,
         # "CONNECT_VISUALISATION_SERVER": visualisation.live_plot.run_plot,

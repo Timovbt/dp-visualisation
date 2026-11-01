@@ -38,6 +38,7 @@ def update_graph(selected_channels,n):
     # layout=go.Layout()
     # )
     global custom_theme
+    print("1")
     if data_stream != None:
         if data_stream.samples_available == 0:
             pass
@@ -47,12 +48,13 @@ def update_graph(selected_channels,n):
                 N = buf_data[0][0] #number of epochs used for average
                 n_channels = int(buf_data[0][1])
                 reset = buf_data[0][2]
+                oddball = int(buf_data[0][3])
+                print(oddball)
                 if N > 10:
                     data_stream.pull_chunk(max_samples=2)
 
-                EEG_average = buf_data[0][3:(280*n_channels)+3].reshape(n_channels,280)
-                EEG_std = buf_data[0][3+(n_channels*280):].reshape(n_channels,280)
-
+                EEG_average = buf_data[0][4:(280*n_channels)+4].reshape(n_channels,280)
+                EEG_std = buf_data[0][4+(n_channels*280):].reshape(n_channels,280)
                 if type(selected_channels) == int: #when only 1 selected
                         selected_channels = [selected_channels]
 
@@ -68,12 +70,21 @@ def update_graph(selected_channels,n):
                 )
 
                 fig.add_vline(0, line_color='black',line_width=3)
-
+                if oddball == 1:
+                    fig.add_scatter(x=TIME,
+                                    y=EEG_std[selected_channels[0],:],
+                                    mode='lines',name =f'{channel_names[selected_channels[0]]} non target',
+                                    line=dict(dash='dash'))
                 if len(selected_channels) > 1:
                     for i in selected_channels:
                         fig.add_scatter(x=TIME,
                                         y=list(EEG_average[i,:]),
                                         mode='lines',name=channel_names[i])
+                        if oddball == 1:
+                            fig.add_scatter(x=TIME,
+                                            y=EEG_std[i,:],
+                                            mode='lines',name =f'{channel_names[i]} non target',
+                                            line=dict(dash='dash'))
                         # fig.add_scatter(x=TIME,
                         #                 y=list(EEG_average[i,:] + EEG_std[i,:]),
                         #                 mode='lines',line={'width':1})
@@ -95,7 +106,7 @@ def connect_stream():
     if data_stream != None:
         data_stream.open_stream()
         info = data_stream.get_sinfo().desc
-
+        print("stream connected")
         _channels = info.child("channels")
         channel = _channels.child("channel")
 
@@ -106,7 +117,6 @@ def connect_stream():
                 break
             channel = next_channel
          
-        print(channel_names)
         global channels
         channels = [{'label':name,'value':i} for i,name in enumerate(channel_names)]
     app.layout = html.Div(

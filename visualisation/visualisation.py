@@ -59,7 +59,8 @@ class Visualisation():
             selected_channel_names: list[str]| None= None,
             output_port: int=8088,
             output_address:str="127.0.0.1",
-            band: list[int] = [6,40]
+            band: list[int] = [6,40],
+            oddball:int = 0
             ):
         
         self.marker_stream_name = marker_stream_name
@@ -74,6 +75,7 @@ class Visualisation():
         self.output_port = output_port
         self.output_address = output_address
         self.band = band
+        self.oddball = oddball
 
         self.selected_ch_idx = None
         self.is_decoding: bool = False
@@ -91,8 +93,9 @@ class Visualisation():
         self.classifier_input_sfreq = None
         self.evoked = None
         self.evoked_std = None
+        self.evoked_non_target = None
+        self.evoked_Target = None
         self.reset = False
-
         
 
     def init_all(self) -> int:
@@ -105,7 +108,10 @@ class Visualisation():
         self.connect_epoch_stream()
         # self.create_filterbank()
         self.plot()
-        self.run()
+        if self.oddball:
+            self.run_ODDBALL()
+        else:
+            self.run()
 
         return 0
 
@@ -117,7 +123,7 @@ class Visualisation():
         info = StreamInfo(
                             name=self.decoder_stream_name,
                             type="data",
-                            channel_count=2 * 280 * len(self.selected_channels) + 3,
+                            channel_count=2 * 280 * len(self.selected_channels) + 4,
                             channel_format=pylsl.cf_float32,
                             source_id="output_average_stream",
                         )
@@ -134,7 +140,7 @@ class Visualisation():
             self.epochstream = EpochsStream(
                             stream = self.input_stream,
                             bufsize = 2,
-                            event_id= {'VEP':1,"reset":3},
+                            event_id= {'VEP':1,"odd":2,"reset":3},
                             tmin=-0.2,
                             tmax=0.5,
                             event_channels=['0'],
@@ -172,7 +178,7 @@ class Visualisation():
         while True:
             if self.epochstream.n_new_epochs == 0:
                         continue  # nothing new to do
-            print(self.epochstream.events)
+            # print(self.epochstream.events)
             if 3 in self.epochstream.events[-(self.epochstream.n_new_epochs+2):]:
                             self.evoked = None
                             self.n = 0
@@ -181,7 +187,7 @@ class Visualisation():
             logger.info("Got %s new epochs.", self.epochstream.n_new_epochs)
             self.n += self.epochstream.n_new_epochs
             data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
-            print(data.shape)
+            # print(data.shape)
             epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400) #.filter(self.band[0],self.band[1])
             self.evoked = (epoch_average if self.evoked is None else combine_evoked([self.evoked, epoch_average], weights="nave"))
 
@@ -217,8 +223,8 @@ class Visualisation():
 
             var = self.sum_squared / self.n - self.average**2
             self.std = self.average/np.sqrt(self.n)#np.sqrt(np.maximum(var, 0))
-            print(self.average.shape)
-            self.outlet.push_sample(np.concat((self.n,self.n_channels_arr,self.reset,self.average.flatten(),self.evoked_std.get_data().flatten()),axis=0))
+            # print(self.average.shape)
+            self.outlet.push_sample(np.concat((self.n,self.n_channels_arr,self.reset,np.array([self.oddball]),self.average.flatten(),self.evoked_std.get_data().flatten()),axis=0))
             self.reset[0] = 0
 
 
@@ -238,51 +244,44 @@ class Visualisation():
                             self.n = 0
                             self.reset[0] = 1 
                             logger.info("RESET")
+
+
             logger.info("Got %s new epochs.", self.epochstream.n_new_epochs)
             self.n += self.epochstream.n_new_epochs
+
             data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
-            print(data.shape)
-            epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400) #.filter(self.band[0],self.band[1])
-            self.evoked = (epoch_average if self.evoked is None else combine_evoked([self.evoked, epoch_average], weights="nave"))
+            event = self.epochstream.events[-1]
+        
+            if event == 1:
+                epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400)
+                self.evoked_Target = (epoch_average if self.evoked_Target is None else combine_evoked([self.evoked_Target, epoch_average], weights="nave"))
+                self.average_T = self.evoked_Target.get_data()
+                if self.evoked_non_target is None:  
+                    self.average_NT = np.zeros(shape=self.average_T.shape)         
+            if event == 2:
+                epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400) 
+                self.evoked_non_target = (epoch_average if self.evoked_non_target is None else combine_evoked([self.evoked_non_target, epoch_average], weights="nave"))
+                self.average_NT = self.evoked_non_target.get_data()
+                if self.evoked_Target is None:
+                     self.average_T = np.zeros(shape=self.average_NT.shape)
+                     
+            self.n = np.array([1])#np.array([self.evoked_non_target.nave + self.evoked_target.nave])
+            # self.average = self.evoked.get_data()
 
-            #std computation
-            batch_sum = np.sum(data, axis=0)
-            batch_sum2 = np.sum(data ** 2, axis=0)
-
-            if self.sum_x is None:
-                self.sum_x = batch_sum
-                self.sum_x2 = batch_sum2
-                self.count = data.shape[0]
-            else:
-                self.sum_x += batch_sum
-                self.sum_x2 += batch_sum2
-                self.count += data.shape[0]
-
-            mean = self.sum_x / self.count
-            var = self.sum_x2 / self.count - mean**2
-
-            # Numerical safety
-            var = np.maximum(var, 0)
-
-            std = np.sqrt(var)
-
-            self.evoked_std = EvokedArray(
-                std,
-                self.epochstream.info,
-                nave=self.count,
-            ).resample(400)
-
-            self.n = np.array([self.evoked.nave])
-            self.average = self.evoked.get_data()
-
-            var = self.sum_squared / self.n - self.average**2
-            self.std = self.average/np.sqrt(self.n)#np.sqrt(np.maximum(var, 0))
-            print(self.average.shape)
-            self.outlet.push_sample(np.concat((self.n,self.n_channels_arr,self.reset,self.average.flatten(),self.evoked_std.get_data().flatten()),axis=0))
+            self.outlet.push_sample(np.concat((self.n,
+                                               self.n_channels_arr,
+                                               self.reset,
+                                               np.array([self.oddball]),
+                                               self.average_T.flatten(),
+                                               self.average_NT.flatten()
+                                               ),axis=0))
             self.reset[0] = 0
 
 
-
+    def set_oddball(self):
+        self.oddball = 1
+        print(f'oddball: {self.oddball}')
+        return 0
     def reset(self):
         """
         Reset the running average
@@ -306,7 +305,8 @@ def visualisation_factory(config_path: Path = Path("./configs/config.toml")):
         selected_channel_names=cfg['data'].get("selected_channel_names", None),
         output_port=cfg["visualisation"]["output_port"],
         output_address=cfg["visualisation"]["output_address"],
-        band = cfg["data"]["passband_hz"]
+        band = cfg["data"]["passband_hz"],
+        oddball = False
     )
     return decoder
 
