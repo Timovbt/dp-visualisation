@@ -191,39 +191,12 @@ class Visualisation():
             epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400) #.filter(self.band[0],self.band[1])
             self.evoked = (epoch_average if self.evoked is None else combine_evoked([self.evoked, epoch_average], weights="nave"))
 
-            #std computation
-            batch_sum = np.sum(data, axis=0)
-            batch_sum2 = np.sum(data ** 2, axis=0)
-
-            if self.sum_x is None:
-                self.sum_x = batch_sum
-                self.sum_x2 = batch_sum2
-                self.count = data.shape[0]
-            else:
-                self.sum_x += batch_sum
-                self.sum_x2 += batch_sum2
-                self.count += data.shape[0]
-
-            mean = self.sum_x / self.count
-            var = self.sum_x2 / self.count - mean**2
-
-            # Numerical safety
-            var = np.maximum(var, 0)
-
-            std = np.sqrt(var)
-
-            self.evoked_std = EvokedArray(
-                std,
-                self.epochstream.info,
-                nave=self.count,
-            ).resample(400)
+            self.stack = (data if self.stack is None else np.concatenate((self.stack,data),axis=0))
+            self.evoked_std = EvokedArray(np.std(self.stack,axis=0),self.epochstream.info,nave=data.shape[0]).resample(400)
 
             self.n = np.array([self.evoked.nave])
             self.average = self.evoked.get_data()
 
-            var = self.sum_squared / self.n - self.average**2
-            self.std = self.average/np.sqrt(self.n)#np.sqrt(np.maximum(var, 0))
-            # print(self.average.shape)
             self.outlet.push_sample(np.concat((self.n,self.n_channels_arr,self.reset,np.array([self.oddball]),self.average.flatten(),self.evoked_std.get_data().flatten()),axis=0))
             self.reset[0] = 0
 
