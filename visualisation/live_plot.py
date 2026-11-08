@@ -58,12 +58,12 @@ def update_graph(selected_channels,n,std):
                 EEG_std = buf_data[0][4+(n_channels*280):].reshape(n_channels,280)
                 if type(selected_channels) == int: #when only 1 selected
                         selected_channels = [selected_channels]
-
+                Title = f"Number of epochs {int(N)}" if oddball == 0 else f"Number of target-epochs {int(N)}" 
                 fig = px.line(
                         x=TIME, #name='Scatter',
                         y=list(EEG_average[selected_channels[0],:]),
                         template=custom_theme,
-                        title = f"Number of epochs {int(N)}"
+                        title = Title
                         #mode= 'lines'
                 ).update_layout(
                 xaxis_title="Time (ms)", yaxis_title="\u03bcV",

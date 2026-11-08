@@ -17,7 +17,7 @@ def main(port: int = 8082, ip: str = "127.0.0.1", loglevel: int = 10,
 
     pcommand_map = {
         "CONNECT_DECODER": decoder.init_all,
-        "SET_ODDBALL": decoder.set_oddball,
+        "TOGGLE_ODDBALL": decoder.set_oddball,
     }
 
     server = DefaultServer(

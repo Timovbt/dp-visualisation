@@ -221,7 +221,7 @@ class Visualisation():
 
 
             logger.info("Got %s new epochs.", self.epochstream.n_new_epochs)
-            self.n += self.epochstream.n_new_epochs
+            # self.n += self.epochstream.n_new_epochs
 
             data = self.epochstream.get_data(n_epochs=self.epochstream.n_new_epochs)
             event = self.epochstream.events[-1]
@@ -230,6 +230,7 @@ class Visualisation():
                 epoch_average = EvokedArray(np.average(data, axis=0), self.epochstream.info, nave=data.shape[0]).resample(400)
                 self.evoked_Target = (epoch_average if self.evoked_Target is None else combine_evoked([self.evoked_Target, epoch_average], weights="nave"))
                 self.average_T = self.evoked_Target.get_data()
+                self.n = self.evoked_Target.nave
                 if self.evoked_non_target is None:  
                     self.average_NT = np.zeros(shape=self.average_T.shape)         
             if event == 2:
@@ -239,10 +240,10 @@ class Visualisation():
                 if self.evoked_Target is None:
                      self.average_T = np.zeros(shape=self.average_NT.shape)
                      
-            self.n = np.array([1])#np.array([self.evoked_non_target.nave + self.evoked_target.nave])
+           #np.array([self.evoked_non_target.nave + self.evoked_target.nave])
             # self.average = self.evoked.get_data()
 
-            self.outlet.push_sample(np.concat((self.n,
+            self.outlet.push_sample(np.concat((np.array([self.n]),
                                                self.n_channels_arr,
                                                self.reset,
                                                np.array([self.oddball]),
