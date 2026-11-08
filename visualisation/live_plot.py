@@ -2,6 +2,7 @@ import dash
 import plotly
 import threading
 import plotly.express as px
+import plotly.colors as pc
 import numpy as np
 import toml
 import plotly.graph_objs as go
@@ -15,7 +16,7 @@ from mne_lsl.lsl import StreamInlet,resolve_streams
 from visualisation.visualisation import visualisation_factory
 """Script to initialize a Dash server on which to show Plotly plot"""
 channel_names = []
-
+colors = px.colors.qualitative.D3
 
 TIME = np.arange(-200,500,2.5) 
 
@@ -26,9 +27,9 @@ app = dash.Dash(__name__)
 
 @app.callback(
     Output('live-graph', 'figure'),
-    [Input('dropdown_channels','value'),Input('graph-update', 'n_intervals')]
+    [Input('dropdown_channels','value'),Input('graph-update', 'n_intervals'),Input('std','value')]
 )
-def update_graph(selected_channels,n):
+def update_graph(selected_channels,n,std):
     """
     Function to update the graph with new data from the LSL stream, 
     this function is automatically called by the dash server
@@ -41,7 +42,7 @@ def update_graph(selected_channels,n):
     print("1")
     if data_stream != None:
         if data_stream.samples_available == 0:
-            pass
+            return dash.no_update
         else:
             buf_data = data_stream.pull_sample()
             if buf_data[0].shape[0] > 0:
@@ -75,22 +76,37 @@ def update_graph(selected_channels,n):
                                     y=EEG_std[selected_channels[0],:],
                                     mode='lines',name =f'{channel_names[selected_channels[0]]} non target',
                                     line=dict(dash='dash'))
+
+                if "std" in std:
+                    fig.add_scatter(x=TIME,
+                                    y=list(EEG_average[selected_channels[0]] + EEG_std[selected_channels[0]]),
+                                    mode='lines',line={'width':1},showlegend=False,)
+                    fig.add_scatter(x=TIME,
+                                    y=list(EEG_average[selected_channels[0]] - EEG_std[selected_channels[0]]),
+                                    mode='lines',fill="tonexty",line={'width':1},showlegend=False,)
+                                            
                 if len(selected_channels) > 1:
-                    for i in selected_channels:
+                    for i,idx in enumerate(selected_channels):
+                        channel_color = colors[idx % len(colors)]
+                        rgb = pc.hex_to_rgb(channel_color) if channel_color.startswith('#') else (31, 119, 180) # fallback
+                        fill_rgba = f"rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.2)"
+
                         fig.add_scatter(x=TIME,
                                         y=list(EEG_average[i,:]),
-                                        mode='lines',name=channel_names[i])
+                                        mode='lines',name=channel_names[i],
+                                        line=dict(color=channel_color))
                         if oddball == 1:
                             fig.add_scatter(x=TIME,
                                             y=EEG_std[i,:],
                                             mode='lines',name =f'{channel_names[i]} non target',
-                                            line=dict(dash='dash'))
-                        # fig.add_scatter(x=TIME,
-                        #                 y=list(EEG_average[i,:] + EEG_std[i,:]),
-                        #                 mode='lines',line={'width':1})
-                        # fig.add_scatter(x=TIME,
-                        #                 y=list(EEG_average[i,:] - EEG_std[i,:]),
-                        #                 mode='lines',fill="tonexty",line={'width':1})
+                                            line=dict(dash='dash',color=channel_color))
+                        if "std" in std:
+                            fig.add_scatter(x=TIME,
+                                            y=list(EEG_average[i,:] + EEG_std[i,:]),
+                                            mode='lines',line=dict(color=channel_color, width=1),showlegend=False)
+                            fig.add_scatter(x=TIME,
+                                            y=list(EEG_average[i,:] - EEG_std[i,:]),fillcolor =fill_rgba,
+                                            mode='lines',fill="tonexty",line=dict(color=channel_color, width=1),showlegend=False)
                 return fig 
 
 def connect_stream():
@@ -131,6 +147,11 @@ def connect_stream():
         options=channels,
         value=0,multi=True
     ),
+         dcc.Checklist(
+                id="std",
+                options=[{"label": "Enable STD", "value": "std"}],
+                value=[],
+        ),
     ]
 )
 

@@ -96,6 +96,7 @@ class Visualisation():
         self.evoked_non_target = None
         self.evoked_Target = None
         self.reset = False
+        self.stack = None
         
 
     def init_all(self) -> int:
@@ -252,7 +253,7 @@ class Visualisation():
 
 
     def set_oddball(self):
-        self.oddball = 1
+        self.oddball = 1 if self.oddball == 0 else 0
         print(f'oddball: {self.oddball}')
         return 0
     def reset(self):
